@@ -31,13 +31,15 @@ Sensor and parts used in the design:
     - eigen
     - pm2_drivers
 
-In order to run the project you need to have Mbed Studio with which you can compile the ``main`` program and run it on the microcontroller. All the libraries you need are included in the repository. If you use a different design, kinematics, or hardware, you need to change the appropriate variables for the program to run properly. Also, if you are not using custom PES Board, you need to change pins names that are passed as parameters while objects are defined.
+In order to run the project you need to have Mbed Studio with which you can compile the ``main`` program and run it on the microcontroller. All the libraries you need are included in the repository. If you use a different design, kinematics, or hardware, you need to change the appropriate variables for the program to run properly. Also, if you are not using a custom PES Board, you need to change pins names that are passed as parameters while objects are defined.
 
 
 
 ## Comments
 - The files include a map that should be printed on a large scale for the algorithm to run properly: [MAP](docs/Highspeed_2.pdf)
 
+## Notes:
+- Update dependencies after releasing drivers! 
 <!-- link list, last updated 16.01.2024 -->
 [1]: https://www.st.com/en/evaluation-tools/nucleo-f446re.html
 [2]: https://www.pololu.com/product/3477
