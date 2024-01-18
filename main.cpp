@@ -13,7 +13,7 @@
 // logical variable main task
 bool do_execute_main_task = false; 
 
-// user button on nucleo board
+// user button on Nucleo board
 Timer user_button_timer;            
 DebounceIn user_button(USER_BUTTON);
 // Function that triggers main task execution   
@@ -26,10 +26,10 @@ float vel_cntrl_v2_fcn(const float& wheel_speed_max, const float& b, const float
 
 int main()
 {
-    // states and actual state for state machine, machine will have 3 states:
+    // states and actual state for the state machine, the machine will have 3 states:
     // initial - to enable all systems
     // follow - to follow the line
-    // sleep - to wait for signal from the environment (e.g. line detection)
+    // sleep - to wait for the signal from the environment (e.g. line detection)
     enum RobotState {
         INITIAL,
         FOLLOW,
@@ -63,7 +63,7 @@ int main()
     // sensor data evalution
     const float bar_dist = 0.1175f; // distance from bar to wheel axis 
 
-    // line following sensor object deffinition
+    // line following sensor object definition
     I2C i2c(PB_9, PB_8);
     SensorBar sensor_bar(i2c, bar_dist);
 
@@ -102,8 +102,7 @@ int main()
             if (sensor_bar.isAnyLedActive()) {
                 sensor_bar_avgAngleRad = sensor_bar.getAvgAngleRad();
                 i = 0;
-            } 
-            else {
+            } else {
                 i += 1;
             }
 
@@ -159,7 +158,7 @@ int main()
                     break; // do nothing
             }
         }
-        // toggling user led
+        // toggling user-led
         user_led = !user_led;
 
         // printing parameters
