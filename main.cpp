@@ -47,7 +47,7 @@ int main()
     DigitalOut user_led(USER_LED); 
 
     // robot kinematics
-    const float r_wheel = 0.0358f / 2.0f; // wheel radius
+    const float r_wheel = 0.0348f / 2.0f; // wheel radius
     const float L_wheel = 0.143f;         // distance from wheel to wheel
     Eigen::Matrix2f Cwheel2robot; // transform wheel to robot
     //Eigen::Matrix2f Crobot2wheel; // transform robot to wheel
@@ -75,11 +75,11 @@ int main()
     const float voltage_max = 12.0f;
     const float gear_ratio = 78.125f; 
     const float kn = 180.0f / 12.0f; //motor constant rpm / V
-    const float velocity_max = kn * voltage_max / 60.0f; // Max velocity that can be reached
+    const float velocity_max = kn * voltage_max / 60.0f; // max velocity that can be reached rps
     DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max);
-    motor_M1.setMaxVelocity(velocity_max); 
+    motor_M1.setMaxVelocity(velocity_max); //right
     DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max);
-    motor_M2.setMaxVelocity(velocity_max);
+    motor_M2.setMaxVelocity(velocity_max); //left
 
     // condition for state machine that will stop the robot 1 seconds after leaving the line (CAN BE CHANGED)
     bool move = false;
@@ -114,12 +114,12 @@ int main()
             }
 
             // robot angular velocity evaluation
-            const static float Kp = 3.0f; // by making this const static it will not be overwritten and only initiliazed once
+            const static float Kp = 2.0f; // by making this const static it will not be overwritten and only initiliazed once
             const static float Kp_nl = 17.0f;
             robot_coord(1) = ang_cntrl_fcn(Kp, Kp_nl, sensor_bar_avgAngleRad);
             
             // nonlinear controllers version 2 (one wheel always at full speed controller)
-            const static float wheel_speed_max = 23.0f * voltage_max * kn / (60.0f * 2.0f * M_PI); // TODO check the wheel speed on map
+            const static float wheel_speed_max = 2.0f * M_PI * voltage_max * kn / (60.0f); // rad/s
             const static float b = L_wheel / (2.0f * r_wheel);
             robot_coord(0) = vel_cntrl_v2_fcn(wheel_speed_max, b, robot_coord(1), Cwheel2robot);
 
@@ -162,7 +162,7 @@ int main()
         user_led = !user_led;
 
         // printing parameters
-        printf("%f, %f, %f\r\n", motor_M1.getVelocity(), motor_M2.getVelocity(), sensor_bar.getAvgAngleRad() * 180.0f / M_PI);
+        printf("%f, %f, %f \r\n", wheel_speed(0), wheel_speed(1), sensor_bar.getAvgAngleRad() * 180.0f / M_PI);
 
         int main_task_elapsed_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(main_task_timer.elapsed_time()).count();
         thread_sleep_for(main_task_period_ms - main_task_elapsed_time_ms);
@@ -200,11 +200,11 @@ float vel_cntrl_v2_fcn(const float& wheel_speed_max, const float& b, const float
     static Eigen::Matrix<float, 2, 2> _wheel_speed;
     static Eigen::Matrix<float, 2, 2> _robot_coord;
     if (robot_omega > 0) {
-        _wheel_speed(0) = wheel_speed_max;
-        _wheel_speed(1) = wheel_speed_max - 2*b*robot_omega;
+        _wheel_speed(0, 0) = wheel_speed_max;                       //right
+        _wheel_speed(1, 0) = wheel_speed_max - 2*b*robot_omega;     //left
     } else {
-        _wheel_speed(0) = wheel_speed_max + 2*b*robot_omega;
-        _wheel_speed(1) = wheel_speed_max;
+        _wheel_speed(0, 0) = wheel_speed_max + 2*b*robot_omega;     //right
+        _wheel_speed(1, 0) = wheel_speed_max;                       //left
     }
     _robot_coord = Cwheel2robot * _wheel_speed;
 
