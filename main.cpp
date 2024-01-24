@@ -7,6 +7,150 @@
 #include "pm2_drivers/SensorBar.h"
 #include "pm2_drivers/PESBoardPinMap.h"
 #include "eigen/Dense.h"
+#include "pm2_drivers/LineFollower.h"
+
+#define M_PI 3.14159265358979323846  // number pi
+
+// logical variable main task
+bool do_execute_main_task = false; 
+
+// user button on Nucleo board
+Timer user_button_timer;            
+DebounceIn user_button(USER_BUTTON);
+// Function that triggers main task execution   
+void user_button_pressed_fcn();    
+
+int main()
+{
+    // states and actual state for the state machine, the machine will have 3 states:
+    // initial - to enable all systems
+    // follow - to follow the line
+    // sleep - to wait for the signal from the environment (e.g. line detection)
+    enum RobotState {
+        INITIAL,
+        FOLLOW,
+        SLEEP,
+    } robot_state = RobotState::INITIAL;
+
+    // attach button fall function to user button object
+    user_button.fall(&user_button_pressed_fcn);
+
+    // while loop gets executed every main_task_period_ms milliseconds
+    const int main_task_period_ms = 20;   // define main task period time in ms
+    Timer main_task_timer;  
+
+    // led on nucleo board
+    DigitalOut user_led(USER_LED); 
+
+    // digital out object for enabling motors
+    DigitalOut enable_motors(PB_ENABLE_DCMOTORS);
+
+    // in the robot there will be used 78:1 Metal Gearmotor 20Dx44L mm 12V CB
+    // define variables and create DC motor objects
+    const float voltage_max = 12.0f;
+    const float gear_ratio = 78.125f; 
+    const float kn = 180.0f / 12.0f; //motor constant rpm / V
+    const float velocity_max = kn * voltage_max / 60.0f; // max velocity that can be reached rps
+    DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max);
+    motor_M1.setMaxVelocity(velocity_max); //right
+    DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max);
+    motor_M2.setMaxVelocity(velocity_max); //left
+
+    const float d_wheel = 0.0348f;        // wheel diameter
+    const float L_wheel = 0.143f;         // distance from wheel to wheel
+    // sensor data evalution
+    const float bar_dist = 0.1175f;
+
+    LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, L_wheel, velocity_max);
+
+    // condition for state machine that will stop the robot 1 seconds after leaving the line (CAN BE CHANGED)
+    bool move = false;
+    const static float stop_time = 1.0f; //seconds
+    const static int stop_time_iteration = stop_time * 1000 / main_task_period_ms;
+    static int i = stop_time_iteration + 1;
+
+    // timer to measure task execution time
+    main_task_timer.start();
+
+    while (true) {
+
+        main_task_timer.reset();
+
+        if (do_execute_main_task) {
+
+            // line detection checking
+            if (lineFollower.isLedActive()) {
+                i = 0;
+            } else {
+                i += 1;
+            }
+
+            // robot stop condition checking
+            if (i > stop_time_iteration) {
+                move = false;
+            } else {
+                move = true;
+            }
+
+            // state machine
+            switch (robot_state) {
+                case RobotState::INITIAL:
+                    enable_motors = 1;
+                    if (move == true) {
+                        robot_state = RobotState::FOLLOW;
+                    } else {
+                        robot_state = RobotState::SLEEP;
+                    }
+                    break;
+
+                case RobotState::FOLLOW:
+                    motor_M1.setVelocity(lineFollower.getRightWheelVelocity()); // set a desired speed for speed controlled dc motors M1
+                    motor_M2.setVelocity(lineFollower.getLeftWheelVelocity()); // set a desired speed for speed controlled dc motors M2
+
+                    if (move == false) {
+                        robot_state = RobotState::SLEEP;
+                    }
+                    break;
+
+                case RobotState::SLEEP:
+                    motor_M1.setVelocity(0);
+                    motor_M2.setVelocity(0);
+
+                    if (move == true) {
+                        robot_state = RobotState::FOLLOW;
+                    }
+                    break;
+                default:
+                    break; // do nothing
+            }
+        }
+        // toggling user-led
+        user_led = !user_led;
+
+        // printing parameters
+        //printf("Right command:%f, Right real: %f, Left command: %f, Left real: %f \r\n",lineFollower.getRightWheelVelocity(), motor_M1.getVelocity(), lineFollower.getLeftWheelVelocity(), motor_M2.getVelocity());
+
+        int main_task_elapsed_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(main_task_timer.elapsed_time()).count();
+        thread_sleep_for(main_task_period_ms - main_task_elapsed_time_ms);
+    }
+}
+
+void user_button_pressed_fcn()
+{
+    // do_execute_main_task if the button was pressed
+    do_execute_main_task = !do_execute_main_task;
+}
+
+/*
+#include <mbed.h>
+#include <math.h>
+
+#include "pm2_drivers/DebounceIn.h"
+#include "pm2_drivers/EncoderCounter.h"
+#include "pm2_drivers/DCMotor.h"
+#include "pm2_drivers/SensorBar.h"
+#include "pm2_drivers/PESBoardPinMap.h"
+#include "eigen/Dense.h"
 
 #define M_PI 3.14159265358979323846  // number pi
 
@@ -186,14 +330,12 @@ float ang_cntrl_fcn(const float& Kp, const float& Kp_nl, const float& angle)
     return retval;
 }
 
-/*
 float vel_cntrl_v1_fcn(const float& vel_max, const float& vel_min, const float& ang_max, const float& angle)
 {
     const static float gain = (vel_min - vel_max) / ang_max;
     const static float offset = vel_max;
     return gain * fabs(angle) + offset;
 }
-*/
 
 float vel_cntrl_v2_fcn(const float& wheel_speed_max, const float& b, const float& robot_omega, const Eigen::Matrix2f& Cwheel2robot)
 {
@@ -210,3 +352,23 @@ float vel_cntrl_v2_fcn(const float& wheel_speed_max, const float& b, const float
 
     return _robot_coord(0);
 }
+
+
+// in the robot there will be used 78:1 Metal Gearmotor 20Dx44L mm 12V CB
+    // define variables and create DC motor objects
+    const float voltage_max = 12.0f;
+    const float gear_ratio = 31.25f; 
+    const float kn = 450.0f / 12.0f; //motor constant rpm / V
+    const float velocity_max = kn * voltage_max / (60.0f * 3.0f); // max velocity that can be reached rps
+    DCMotor motor_M1(PB_PWM_M1, PB_ENC_A_M1, PB_ENC_B_M1, gear_ratio, kn, voltage_max);
+    //motor_M1.setMaxVelocity(velocity_max); //right
+    DCMotor motor_M2(PB_PWM_M2, PB_ENC_A_M2, PB_ENC_B_M2, gear_ratio, kn, voltage_max);
+    //motor_M2.setMaxVelocity(velocity_max); //left
+
+    const float d_wheel = 0.0563f;        // wheel diameter
+    const float L_wheel = 0.133f;         // distance from wheel to wheel
+    // sensor data evalution
+    const float bar_dist = 0.083f;
+
+    LineFollower lineFollower(PB_9, PB_8, bar_dist, d_wheel, L_wheel, velocity_max);
+*/
